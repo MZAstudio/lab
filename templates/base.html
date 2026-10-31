@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Healthcare PM{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+{% set _sd = sd|default('2024-03-15') %}
+{% set _tab = tab|default('overview') %}
+{% set _health = health|default('On Track') %}
+{% set _kpi = kpi|default({}) %}
+
+<!-- TOP HEADER -->
+<header class="top-header">
+  <div class="logo">
+    <div class="logo-dot">⚕</div>
+    Smart Healthcare PM
+  </div>
+  <div class="header-right">
+    <span class="sd-label">Status date</span>
+    <input type="date" id="sd-picker" class="sd-input" value="{{ _sd }}">
+    <span class="health-badge {{ 'hb-ontrack' if _health=='On Track' else ('hb-atrisk' if _health=='At Risk' else 'hb-critical') }}">
+      {{ '✓' if _health=='On Track' else ('⚠' if _health=='At Risk' else '🔴') }} {{ _health }}
+    </span>
+  </div>
+</header>
+
+<!-- TAB BAR -->
+<nav class="tab-bar">
+  <a href="{{ url_for('overview',sd=_sd) }}" class="tab-link {{ 'active' if _tab=='overview' }}">Overview</a>
+  <a href="{{ url_for('initiation',sd=_sd) }}" class="tab-link {{ 'active' if _tab=='initiation' }}">Initiation</a>
+  <a href="{{ url_for('scope',sd=_sd) }}" class="tab-link {{ 'active' if _tab=='scope' }}">Scope &amp; WBS</a>
+  <a href="{{ url_for('schedule',sd=_sd) }}" class="tab-link {{ 'active' if _tab=='schedule' }}">Schedule</a>
+  <a href="{{ url_for('cost',sd=_sd) }}" class="tab-link {{ 'active' if _tab=='cost' }}">Cost &amp; EVM</a>
+  <a href="{{ url_for('quality',sd=_sd) }}" class="tab-link {{ 'active' if _tab=='quality' }}">Quality &amp; Risk</a>
+</nav>
+
+<!-- KPI RIBBON -->
+<div class="kpi-ribbon">
+  <div class="kpi-item">
+    <span class="kpi-lbl">Approved budget</span>
+    <span class="kpi-val">PKR {{ "{:,.0f}".format(_kpi.get('approved_budget',0)) }}</span>
+  </div>
+  <div class="kpi-item">
+    <span class="kpi-lbl">Planned cost (BAC)</span>
+    <span class="kpi-val {{ 'danger' if _kpi.get('planned_cost',0) > _kpi.get('approved_budget',1) else '' }}">PKR {{ "{:,.0f}".format(_kpi.get('planned_cost',0)) }}</span>
+  </div>
+  <div class="kpi-item">
+    <span class="kpi-lbl">Actual cost</span>
+    <span class="kpi-val {{ 'danger' if _kpi.get('actual_cost',0) > _kpi.get('approved_budget',1) else '' }}">PKR {{ "{:,.0f}".format(_kpi.get('actual_cost',0)) }}</span>
+  </div>
+  <div class="kpi-item">
+    <span class="kpi-lbl">Progress</span>
+    <span class="kpi-val">{{ _kpi.get('progress',0) }}%</span>
+  </div>
+  <div class="kpi-item">
+    <span class="kpi-lbl">Deadline</span>
+    <span class="kpi-val">{{ _kpi.get('deadline','—') }}</span>
+  </div>
+  <div class="kpi-item">
+    <span class="kpi-lbl">Projected finish</span>
+    {% set pf = _kpi.get('projected_finish','—') %}
+    {% set dl = _kpi.get('deadline','') %}
+    <span class="kpi-val {{ 'danger' if pf > dl and dl else '' }}">{{ pf }}</span>
+  </div>
+  {% set cpi = _kpi.get('evm',{}).get('cpi') %}
+  {% set spi = _kpi.get('evm',{}).get('spi') %}
+  <div class="kpi-item">
+    <span class="kpi-lbl">CPI</span>
+    <span class="kpi-val {{ 'danger' if cpi and cpi<0.9 else ('warn' if cpi and cpi<1.0 else 'ok') }}">{{ "%.3f"|format(cpi) if cpi is not none else 'N/A' }}</span>
+  </div>
+  <div class="kpi-item">
+    <span class="kpi-lbl">SPI</span>
+    <span class="kpi-val {{ 'danger' if spi and spi<0.9 else ('warn' if spi and spi<1.0 else 'ok') }}">{{ "%.3f"|format(spi) if spi is not none else 'N/A' }}</span>
+  </div>
+</div>
+
+<!-- PAGE CONTENT -->
+{% block content %}{% endblock %}
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

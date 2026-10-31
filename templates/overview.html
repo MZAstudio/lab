@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Overview — Healthcare PM{% endblock %}
+{% block content %}
+<div class="workspace">
+  <div class="pane-main" style="max-width:100%">
+
+    <!-- Mission strip: 3 columns -->
+    <div class="mission-strip">
+      <div class="ms-card">
+        <div class="ms-card-title">Pending change requests</div>
+        <div class="ms-number {{ 'warn' if pending_cr|length > 0 else 'ok' }}">{{ pending_cr|length }}</div>
+        {% for cr in pending_cr[:3] %}
+        <div style="font-size:12px;color:var(--ink3);margin-top:4px">• {{ cr.title }}</div>
+        {% endfor %}
+        <a href="{{ url_for('scope',sd=sd) }}" style="display:block;margin-top:8px;font-size:12px;font-weight:600;color:var(--primary)">View change requests →</a>
+      </div>
+
+      <div class="ms-card">
+        <div class="ms-card-title">Delayed activities</div>
+        <div class="ms-number {{ 'danger' if delayed|length > 0 else 'ok' }}">{{ delayed|length }}</div>
+        {% for d in delayed[:3] %}
+        <div style="font-size:12px;color:var(--danger);margin-top:4px">• {{ d.name }}: {{ d.percent_complete|int }}% ({{ d.reason[:40] }}…)</div>
+        {% endfor %}
+        <a href="{{ url_for('schedule',sd=sd) }}" style="display:block;margin-top:8px;font-size:12px;font-weight:600;color:var(--primary)">View schedule →</a>
+      </div>
+
+      <div class="ms-card">
+        <div class="ms-card-title">Unresolved critical defects</div>
+        <div class="ms-number {{ 'danger' if crit_defects|length > 0 else 'ok' }}">{{ crit_defects|length }}</div>
+        {% for d in crit_defects[:3] %}
+        <div style="font-size:12px;color:var(--danger);margin-top:4px">• {{ d.title }}</div>
+        {% endfor %}
+        <a href="{{ url_for('quality',sd=sd) }}" style="display:block;margin-top:8px;font-size:12px;font-weight:600;color:var(--primary)">View defects →</a>
+      </div>
+    </div>
+
+    <!-- EVM Gauges + Budget bar -->
+    <div class="gauge-row">
+      <div class="gauge-card">
+        <div class="gauge-label">CPI — Cost Performance Index</div>
+        <canvas id="gaugeCPI" class="gauge-svg" width="200" height="110"></canvas>
+        {% set cpi = kpi.evm.cpi %}
+        <div style="font-size:12px;color:var(--ink3);margin-top:4px">
+          EV / AC &nbsp;·&nbsp;
+          {% if cpi is none %}N/A
+          {% elif cpi >= 1.0 %}<span class="text-success">Under budget</span>
+          {% elif cpi >= 0.9 %}<span class="text-warn">Caution — over budget</span>
+          {% else %}<span class="text-danger">Critical — severe overrun</span>{% endif %}
+        </div>
+        <!-- supporting CV -->
+        <div style="font-size:12px;color:var(--ink3);margin-top:2px">CV = PKR {{ "{:,.0f}".format(kpi.evm.cv) }}</div>
+      </div>
+      <div class="gauge-card">
+        <div class="gauge-label">SPI — Schedule Performance Index</div>
+        <canvas id="gaugeSPI" class="gauge-svg" width="200" height="110"></canvas>
+        {% set spi = kpi.evm.spi %}
+        <div style="font-size:12px;color:var(--ink3);margin-top:4px">
+          EV / PV &nbsp;·&nbsp;
+          {% if spi is none %}N/A
+          {% elif spi >= 1.0 %}<span class="text-success">Ahead of schedule</span>
+          {% elif spi >= 0.9 %}<span class="text-warn">Caution — behind plan</span>
+          {% else %}<span class="text-danger">Critical — major delay</span>{% endif %}
+        </div>
+        <!-- supporting SV -->
+        <div style="font-size:12px;color:var(--ink3);margin-top:2px">SV = PKR {{ "{:,.0f}".format(kpi.evm.sv) }}</div>
+      </div>
+    </div>
+
+    <!-- Budget stacked bar -->
+    <div class="budget-bar-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <span class="section-title" style="margin:0">Budget status</span>
+        <div style="display:flex;gap:16px;font-size:12px">
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#B0C4DE;border-radius:2px;display:inline-block"></span>Planned PKR {{ "{:,.0f}".format(kpi.planned_cost) }}</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:var(--primary);border-radius:2px;display:inline-block"></span>Actual PKR {{ "{:,.0f}".format(kpi.actual_cost) }}</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:2px;height:12px;background:var(--danger);display:inline-block"></span>Approved PKR {{ "{:,.0f}".format(kpi.approved_budget) }}</span>
+        </div>
+      </div>
+      {% set maxval = [kpi.planned_cost, kpi.actual_cost, kpi.approved_budget]|max %}
+      {% set pp = (kpi.planned_cost / maxval * 100) if maxval > 0 else 0 %}
+      {% set ap = (kpi.actual_cost / maxval * 100) if maxval > 0 else 0 %}
+      {% set ab = (kpi.approved_budget / maxval * 100) if maxval > 0 else 0 %}
+      <div class="bbar-wrap" style="height:28px;margin-top:12px">
+        <div class="bbar-planned" style="width:{{ pp }}%;height:100%"></div>
+        <div class="bbar-actual" style="width:{{ ap }}%;height:100%"></div>
+        <div class="bbar-approved" style="left:{{ ab }}%"></div>
+      </div>
+      <div class="bbar-labels">
+        <span>0</span><span>Approved limit</span><span>PKR {{ "{:,.0f}".format(maxval) }}</span>
+      </div>
+    </div>
+
+    <!-- EVM warnings -->
+    {% if kpi.evm.warnings %}
+    <div class="mb-16">
+      {% for w in kpi.evm.warnings %}
+      <div class="warn-banner warn-{{ w.lvl }}">
+        <span>{{ '🔴' if w.lvl=='critical' else ('🟡' if w.lvl=='caution' else 'ℹ️') }}</span>
+        <span>{{ w.msg }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Milestones timeline -->
+    <div class="card">
+      <div class="card-title">Project milestones</div>
+      <div class="timeline">
+        <div class="tl-line"></div>
+        <div class="tl-items">
+          {% for m in milestones %}
+          <div class="tl-item">
+            <div class="tl-dot {{ m.status.lower().replace(' ','-').replace('in-progress','inprog') }}
+              {{ 'completed' if m.status=='Completed' else ('inprog' if m.status=='In Progress' else ('delayed' if m.status=='Delayed' else 'pending')) }}"></div>
+            <div class="tl-name">{{ m.name }}</div>
+            <div class="tl-date">{{ m.due_date }}</div>
+            <span class="chip chip-{{ 'resolved' if m.status=='Completed' else ('inprog' if m.status=='In Progress' else ('open' if m.status=='Delayed' else 'closed')) }}">{{ m.status }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+drawGauge('gaugeCPI', {{ kpi.evm.cpi|tojson }}, 'CPI');
+drawGauge('gaugeSPI', {{ kpi.evm.spi|tojson }}, 'SPI');
+</script>
+{% endblock %}

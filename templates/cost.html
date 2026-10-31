@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Cost & EVM — Healthcare PM{% endblock %}
+{% block content %}
+<div class="workspace">
+  <div class="pane-list">
+    <div class="pane-header">
+      <span class="pane-title">Cost entries</span>
+      <button class="btn btn-primary btn-sm" onclick="openDrawer('dw-cost')">+ Add cost</button>
+    </div>
+    <div class="pane-body">
+      {% for e in entries %}
+      <div class="list-item">
+        <div style="flex:1;min-width:0">
+          <div class="list-item-title">{{ e.aname }}</div>
+          <div class="list-item-sub">PKR {{ "{:,.0f}".format(e.amount) }} · {{ e.entry_date }}</div>
+          {% if e.description %}<div class="list-item-sub">{{ e.description[:50] }}</div>{% endif %}
+        </div>
+        <div class="list-item-actions">
+          <button class="btn btn-xs btn-danger" onclick="delCost({{ e.id }})">✕</button>
+        </div>
+      </div>
+      {% endfor %}
+      {% if not entries %}
+      <div class="empty-state" style="padding:20px"><div class="es-icon">💰</div><p>No cost entries yet.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="pane-main">
+
+    <!-- EVM Warnings -->
+    {% if evm.warnings %}
+    <div class="mb-16">
+      {% for w in evm.warnings %}
+      <div class="warn-banner warn-{{ w.lvl }}">
+        <span>{{ '🔴' if w.lvl=='critical' else ('🟡' if w.lvl=='caution' else 'ℹ️') }}</span>
+        <span>{{ w.msg }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- EVM Tiles -->
+    <div class="evm-tiles">
+      <div class="evm-tile pv-tile">
+        <div class="evm-tile-lbl">PV — Planned Value</div>
+        <div class="evm-tile-val">PKR {{ "{:,.0f}".format(evm.pv) }}</div>
+        <div class="evm-tile-sub">Budgeted work scheduled to date</div>
+      </div>
+      <div class="evm-tile ev-tile">
+        <div class="evm-tile-lbl">EV — Earned Value</div>
+        <div class="evm-tile-val">PKR {{ "{:,.0f}".format(evm.ev) }}</div>
+        <div class="evm-tile-sub">Value of work completed</div>
+      </div>
+      <div class="evm-tile ac-tile">
+        <div class="evm-tile-lbl">AC — Actual Cost</div>
+        <div class="evm-tile-val">PKR {{ "{:,.0f}".format(evm.ac) }}</div>
+        <div class="evm-tile-sub">Total spent to date</div>
+      </div>
+      {% set cpi = evm.cpi %}
+      <div class="evm-tile {{ 'cpi-ok' if cpi and cpi>=1.0 else ('cpi-warn' if cpi and cpi>=0.9 else 'cpi-bad') }}">
+        <div class="evm-tile-lbl">CPI = EV / AC</div>
+        <div class="evm-tile-val {{ 'ok' if cpi and cpi>=1.0 else ('warn' if cpi and cpi>=0.9 else 'bad') }}">
+          {{ "%.3f"|format(cpi) if cpi is not none else 'N/A' }}
+        </div>
+        <div class="evm-tile-sub">
+          {% if cpi is none %}No actuals yet
+          {% elif cpi >= 1.0 %}Under budget ✓
+          {% elif cpi >= 0.9 %}Caution ⚠
+          {% else %}Critical overrun 🔴{% endif %}
+        </div>
+      </div>
+      {% set spi = evm.spi %}
+      <div class="evm-tile {{ 'cpi-ok' if spi and spi>=1.0 else ('cpi-warn' if spi and spi>=0.9 else 'cpi-bad') }}">
+        <div class="evm-tile-lbl">SPI = EV / PV</div>
+        <div class="evm-tile-val {{ 'ok' if spi and spi>=1.0 else ('warn' if spi and spi>=0.9 else 'bad') }}">
+          {{ "%.3f"|format(spi) if spi is not none else 'N/A' }}
+        </div>
+        <div class="evm-tile-sub">
+          {% if spi is none %}PV is zero
+          {% elif spi >= 1.0 %}Ahead of schedule ✓
+          {% elif spi >= 0.9 %}Caution ⚠
+          {% else %}Major delay 🔴{% endif %}
+        </div>
+      </div>
+      <div class="evm-tile">
+        <div class="evm-tile-lbl">BAC (Budget at Completion)</div>
+        <div class="evm-tile-val">PKR {{ "{:,.0f}".format(evm.bac) }}</div>
+        <div class="evm-tile-sub">Total planned cost</div>
+      </div>
+    </div>
+
+    <!-- CV and SV supporting values -->
+    <div class="card-grid" style="margin-bottom:16px">
+      <div class="card" style="padding:14px 18px">
+        <div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">CV — Cost Variance (EV − AC)</div>
+        <div style="font-size:20px;font-weight:800;color:{{ 'var(--success)' if evm.cv >= 0 else 'var(--danger)' }}">
+          PKR {{ "{:,.0f}".format(evm.cv) }}
+        </div>
+        <div style="font-size:12px;color:var(--ink3)">{{ 'Under budget' if evm.cv >= 0 else 'Over budget' }}</div>
+      </div>
+      <div class="card" style="padding:14px 18px">
+        <div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">SV — Schedule Variance (EV − PV)</div>
+        <div style="font-size:20px;font-weight:800;color:{{ 'var(--success)' if evm.sv >= 0 else 'var(--danger)' }}">
+          PKR {{ "{:,.0f}".format(evm.sv) }}
+        </div>
+        <div style="font-size:12px;color:var(--ink3)">{{ 'Ahead of schedule' if evm.sv >= 0 else 'Behind schedule' }}</div>
+      </div>
+    </div>
+
+    <!-- S-Curve Chart -->
+    <div class="card">
+      <div class="card-title">S-Curve — PV vs EV vs AC</div>
+      <div style="height:260px;position:relative">
+        <canvas id="scurveCanvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Per-activity cost breakdown -->
+    <div class="card">
+      <div class="card-title">Per-activity cost breakdown</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr><th>Activity</th><th class="num">Planned cost</th><th class="num">Actual cost</th>
+            <th class="num">Earned value</th><th class="num">Cost variance</th><th>Progress</th></tr>
+          </thead>
+          <tbody>
+          {% for a in summary %}
+          {% set ev = a.planned_cost * a.percent_complete / 100 %}
+          {% set ac = a.actual_cost %}
+          {% set cv = ev - ac %}
+          <tr style="{{ 'background:#FFF5F5' if ac > a.planned_cost else '' }}">
+            <td>{{ a.name }}</td>
+            <td class="num">PKR {{ "{:,.0f}".format(a.planned_cost) }}</td>
+            <td class="num {{ 'text-danger' if ac > a.planned_cost else '' }}">PKR {{ "{:,.0f}".format(ac) }}</td>
+            <td class="num">PKR {{ "{:,.0f}".format(ev) }}</td>
+            <td class="num {{ 'text-success' if cv >= 0 else 'text-danger' }}">PKR {{ "{:,.0f}".format(cv) }}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:6px">
+                <div class="mini-prog"><div class="mini-prog-fill" style="width:{{ a.percent_complete }}%"></div></div>
+                <span style="font-size:12px">{{ a.percent_complete|int }}%</span>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Add cost drawer -->
+<div id="dw-cost" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">Record actual cost</span><button class="drawer-close" onclick="closeDrawer('dw-cost')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-cost" action="{{ url_for('save_cost_entry') }}" method="POST">
+        <div class="field"><label>Activity *</label>
+          <select name="activity_id" required>
+            <option value="">Select activity…</option>
+            {% for a in acts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Amount (PKR) *</label><input type="number" name="amount" min="0.01" step="100" required></div>
+          <div class="field"><label>Entry date *</label><input type="date" name="entry_date" required></div>
+        </div>
+        <div class="field"><label>Description</label><input type="text" name="description" maxlength="200"></div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-cost','dw-cost')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-cost')">Cancel</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const scurveData = {{ scurve|tojson }};
+renderScurve('scurveCanvas', scurveData);
+
+function delCost(id){
+  if(!confirm('Delete cost entry?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_cost_entry") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+</script>
+{% endblock %}

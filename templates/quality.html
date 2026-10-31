@@ -1,0 +1,452 @@
+{% extends "base.html" %}
+{% block title %}Quality & Risk — Healthcare PM{% endblock %}
+{% block content %}
+<div class="workspace">
+  <div class="pane-list">
+    <div class="pane-header"><span class="pane-title">Quality & Risk</span></div>
+    <div class="pane-body">
+      <div class="list-item" onclick="showQSec('kanban')"><div><div class="list-item-title">🐛 Defect Kanban</div><div class="list-item-sub">{{ defects|length }} total defects</div></div></div>
+      <div class="list-item" onclick="showQSec('checklist')"><div><div class="list-item-title">✅ Quality Checklist</div><div class="list-item-sub">{{ checklists|length }} items</div></div></div>
+      <div class="list-item" onclick="showQSec('heatmap')"><div><div class="list-item-title">⚠️ Risk Matrix</div><div class="list-item-sub">{{ risks|length }} risks</div></div></div>
+      <div class="list-item" onclick="showQSec('pdpc')"><div><div class="list-item-title">🔀 PDPC Chart</div><div class="list-item-sub">Risk responses</div></div></div>
+    </div>
+  </div>
+
+  <div class="pane-main">
+
+    <!-- KANBAN -->
+    <div id="qs-kanban" class="qsec">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <span class="section-title">🐛 Defect Kanban Board</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="sev-filter" class="sd-input" onchange="applyFilter()" style="font-size:12px">
+            <option value="">All severities</option>
+            <option value="Critical" {{ 'selected' if sev_f=='Critical' }}>Critical</option>
+            <option value="High" {{ 'selected' if sev_f=='High' }}>High</option>
+            <option value="Medium" {{ 'selected' if sev_f=='Medium' }}>Medium</option>
+            <option value="Low" {{ 'selected' if sev_f=='Low' }}>Low</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="openDrawer('dw-defect')">+ New defect</button>
+        </div>
+      </div>
+      <div class="kanban">
+        {% for col in ['Open','In Progress','Resolved','Closed'] %}
+        <div class="kanban-col">
+          <div class="kanban-col-header">
+            <span class="kanban-col-title">{{ col }}</span>
+            <span class="kanban-count">{{ kanban.get(col,[])|length }}</span>
+          </div>
+          <div class="kanban-cards" id="kcol-{{ col|replace(' ','-') }}" ondragover="event.preventDefault()" ondrop="dropCard(event,'{{ col }}')">
+            {% for d in kanban.get(col,[]) %}
+            <div class="kanban-card kc-border-{{ d.severity|lower }}" draggable="true" ondragstart="dragCard(event,{{ d.id }})" id="kcard-{{ d.id }}">
+              <div class="kanban-card-title">{{ d.title }}</div>
+              <div class="kanban-card-sub">{{ d.description[:60] }}{% if d.description|length>60 %}…{% endif %}</div>
+              <div class="kanban-card-footer">
+                <span class="chip chip-{{ 'open' if d.severity=='Critical' else ('warn' if d.severity in ['High','Medium'] else 'closed') }} chip-{{ d.severity|lower }}">{{ d.severity }}</span>
+                <div style="display:flex;gap:4px">
+                  <button class="btn btn-xs btn-ghost" onclick="editDefect({{ d.id }},'{{ d.title|e }}',`{{ d.description|e }}`,'{{ d.severity }}','{{ d.status }}',{{ d.assigned_to or 'null' }},{{ d.deliverable_id or 'null' }},{{ d.requirement_id or 'null' }})">✏</button>
+                  <button class="btn btn-xs btn-danger" onclick="delDefect({{ d.id }})">✕</button>
+                </div>
+              </div>
+              {% if d.aname %}<div style="font-size:11px;color:var(--ink3);margin-top:4px">👤 {{ d.aname }}</div>{% endif %}
+              {% if d.dname %}<div style="font-size:11px;color:var(--ink3)">📦 {{ d.dname }}</div>{% endif %}
+              <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
+                {% for st in ['Open','In Progress','Resolved','Closed'] %}
+                {% if st != d.status %}
+                <button class="btn btn-xs btn-ghost" style="font-size:10px" onclick="moveDefect({{ d.id }},'{{ st }}')">→ {{ st }}</button>
+                {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- CHECKLIST -->
+    <div id="qs-checklist" class="qsec" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <span class="section-title">✅ Quality Checklist</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="openDrawer('dw-cl')">+ Checklist item</button>
+          <button class="btn btn-outline btn-sm" onclick="openDrawer('dw-insp')">+ Inspection result</button>
+        </div>
+      </div>
+      {% set del_ids = cl_map.keys()|list %}
+      {% for d in deliverables %}
+      {% if d.id in del_ids or true %}
+      <div class="accordion-item">
+        <div class="accordion-header">
+          <span>📦 {{ d.name }}</span>
+          <span class="acc-arrow">▼</span>
+        </div>
+        <div class="accordion-body">
+          {% set items = cl_map.get(d.id,[]) %}
+          {% if items %}
+          <table class="tbl" style="font-size:12.5px">
+            <thead><tr><th>Item</th><th>Description</th><th>Latest result</th><th></th></tr></thead>
+            <tbody>
+            {% for cl in items %}
+            <tr>
+              <td><strong>{{ cl.item_name }}</strong></td>
+              <td style="color:var(--ink3)">{{ cl.description }}</td>
+              <td>
+                {% set insps = insp_map.get(cl.id,[]) %}
+                {% if insps %}
+                {% set latest = insps|sort(attribute='inspection_date')|last %}
+                <span class="chip chip-{{ 'pass' if latest.result=='Pass' else 'fail' }}">{{ latest.result }}</span>
+                <span style="font-size:11px;color:var(--ink3)"> {{ latest.inspection_date }} · {{ latest.inspector }}</span>
+                {% if latest.remarks %}<div style="font-size:11px;color:var(--ink3)">{{ latest.remarks }}</div>{% endif %}
+                {% else %}
+                <span class="chip chip-closed">Not inspected</span>
+                {% endif %}
+              </td>
+              <td style="white-space:nowrap">
+                <button class="btn btn-xs btn-danger" onclick="delChecklist({{ cl.id }})">Del</button>
+              </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p style="font-size:12px;color:var(--ink3);padding:8px 0">No checklist items for this deliverable.</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <!-- RISK HEATMAP -->
+    <div id="qs-heatmap" class="qsec" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <span class="section-title">⚠️ Risk Prioritization Matrix</span>
+        <button class="btn btn-primary btn-sm" onclick="openDrawer('dw-risk')">+ Add risk</button>
+      </div>
+      <div class="card-grid" style="align-items:start">
+        <!-- heatmap grid -->
+        <div>
+          <div class="sub-title">Heat-map (Likelihood × Impact)</div>
+          <div style="overflow-x:auto">
+            <table class="heatmap">
+              <thead>
+                <tr>
+                  <th class="hm-corner">L\I</th>
+                  {% for i in [1,2,3,4,5] %}<th>I={{ i }}</th>{% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+              {% for l in [5,4,3,2,1] %}
+              <tr>
+                <th style="font-size:11px;font-weight:600;color:var(--ink3);padding:4px 6px">L={{ l }}</th>
+                {% for i in [1,2,3,4,5] %}
+                {% set score = l*i %}
+                {% set lvl = 'hm-l5' if score>=20 else ('hm-l4' if score>=12 else ('hm-l3' if score>=6 else ('hm-l2' if score>=3 else 'hm-l1'))) %}
+                <td class="{{ lvl }}">
+                  <div class="hm-score">{{ score }}</div>
+                  {% for r in risk_matrix[l-1][i-1] %}
+                  <div class="hm-risk-dot" title="{{ r.title }}">• {{ r.title[:18] }}{% if r.title|length>18 %}…{% endif %}</div>
+                  {% endfor %}
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <!-- ranked list -->
+        <div>
+          <div class="sub-title">Ranked risk register</div>
+          <table class="tbl" style="font-size:12.5px">
+            <thead><tr><th>#</th><th>Risk</th><th>L</th><th>I</th><th>Score</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            {% for r in risks %}
+            {% set score = r.likelihood * r.impact %}
+            <tr>
+              <td style="color:var(--ink3)">{{ loop.index }}</td>
+              <td>
+                <strong>{{ r.title }}</strong>
+                <div style="font-size:11px;color:var(--ink3)">{{ r.category }}</div>
+              </td>
+              <td style="text-align:center">{{ r.likelihood }}</td>
+              <td style="text-align:center">{{ r.impact }}</td>
+              <td style="text-align:center">
+                <span style="font-weight:800;font-size:14px;color:{{ 'var(--danger)' if score>=15 else ('var(--warning)' if score>=9 else ('var(--primary)' if score>=4 else 'var(--success)')) }}">{{ score }}</span>
+              </td>
+              <td><span class="chip chip-{{ 'resolved' if r.status=='Closed' else ('inprog' if r.status=='Mitigated' else 'open') }}">{{ r.status }}</span></td>
+              <td style="white-space:nowrap">
+                <button class="btn btn-xs btn-ghost" onclick="editRisk({{ r.id }},'{{ r.title|e }}',`{{ r.description|e }}`,{{ r.likelihood }},{{ r.impact }},'{{ r.category }}','{{ r.status }}')">✏</button>
+                <button class="btn btn-xs btn-danger" onclick="delRisk({{ r.id }})">✕</button>
+              </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDPC -->
+    <div id="qs-pdpc" class="qsec" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <span class="section-title">🔀 PDPC — Process Decision Program Chart</span>
+        <button class="btn btn-primary btn-sm" onclick="openDrawer('dw-pdpc')">+ Add PDPC entry</button>
+      </div>
+      <div class="pdpc-tree">
+        {% for risk_id, data in pdpc_tree.items() %}
+        <div class="pdpc-block">
+          <div class="pdpc-objective-row">🎯 Objective: Deliver Healthcare PM System on time and within budget</div>
+          <div class="pdpc-risk-row"><span>⚠️</span><strong>Potential Risk: {{ data.title }}</strong></div>
+          <div class="pdpc-problems">
+            {% for action in data.actions %}
+            <div class="pdpc-problem-item">
+              <div class="pdpc-prob-header">
+                ❗ Potential Problem: {{ action.potential_problem }}
+                <button class="btn btn-xs btn-danger" style="float:right;margin-top:-2px" onclick="delPDPC({{ action.id }})">✕</button>
+              </div>
+              <div class="pdpc-actions-grid">
+                <div class="pdpc-action-cell">
+                  <div class="pdpc-action-label" style="color:var(--success)">🛡 Preventive action</div>
+                  {{ action.preventive_action }}
+                </div>
+                <div class="pdpc-action-cell">
+                  <div class="pdpc-action-label" style="color:var(--primary)">🔧 Corrective action</div>
+                  {{ action.corrective_action }}
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- DRAWERS -->
+<div id="dw-defect" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title" id="defect-dw-title">New defect</span><button class="drawer-close" onclick="closeDrawer('dw-defect')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-defect" action="{{ url_for('save_defect') }}" method="POST">
+        <input type="hidden" name="id" id="defect-id">
+        <div class="field"><label>Title *</label><input type="text" name="title" required></div>
+        <div class="field"><label>Description *</label><textarea name="description" rows="3" required></textarea></div>
+        <div class="field-row">
+          <div class="field"><label>Severity *</label>
+            <select name="severity" required>
+              <option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+            </select>
+          </div>
+          <div class="field"><label>Status</label>
+            <select name="status">
+              <option>Open</option><option>In Progress</option><option>Resolved</option><option>Closed</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Assigned to</label>
+            <select name="assigned_to"><option value="">— None —</option>
+            {% for tm in team %}<option value="{{ tm.id }}">{{ tm.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field"><label>Deliverable</label>
+            <select name="deliverable_id"><option value="">— None —</option>
+            {% for d in deliverables %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="field"><label>Requirement</label>
+          <select name="requirement_id"><option value="">— None —</option>
+          {% for r in reqs %}<option value="{{ r.id }}">{{ r.title }}</option>{% endfor %}
+          </select>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-defect','dw-defect')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-defect')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-cl" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">Add checklist item</span><button class="drawer-close" onclick="closeDrawer('dw-cl')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-cl" action="{{ url_for('save_checklist') }}" method="POST">
+        <div class="field"><label>Deliverable *</label>
+          <select name="deliverable_id" required><option value="">Select…</option>
+          {% for d in deliverables %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label>Item name *</label><input type="text" name="item_name" required></div>
+        <div class="field"><label>Description</label><textarea name="description" rows="2"></textarea></div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-cl','dw-cl')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-cl')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-insp" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">Record inspection result</span><button class="drawer-close" onclick="closeDrawer('dw-insp')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-insp" action="{{ url_for('save_inspection') }}" method="POST">
+        <div class="field"><label>Checklist item *</label>
+          <select name="checklist_id" required><option value="">Select…</option>
+          {% for cl in checklists %}<option value="{{ cl.id }}">{{ cl.dname }}: {{ cl.item_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Result *</label>
+            <select name="result" required><option>Pass</option><option>Fail</option></select>
+          </div>
+          <div class="field"><label>Inspection date *</label><input type="date" name="inspection_date" required></div>
+        </div>
+        <div class="field"><label>Inspector *</label><input type="text" name="inspector" required></div>
+        <div class="field"><label>Remarks</label><textarea name="remarks" rows="2"></textarea></div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-insp','dw-insp')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-insp')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-risk" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title" id="risk-dw-title">Add risk</span><button class="drawer-close" onclick="closeDrawer('dw-risk')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-risk" action="{{ url_for('save_risk') }}" method="POST">
+        <input type="hidden" name="id" id="risk-id">
+        <div class="field"><label>Title *</label><input type="text" name="title" required></div>
+        <div class="field"><label>Description *</label><textarea name="description" rows="2" required></textarea></div>
+        <div class="field-row">
+          <div class="field"><label>Likelihood (1–5) *</label><input type="number" name="likelihood" min="1" max="5" value="3" required></div>
+          <div class="field"><label>Impact (1–5) *</label><input type="number" name="impact" min="1" max="5" value="3" required></div>
+          <div class="field"><label>Category</label><input type="text" name="category" value="General" maxlength="50"></div>
+        </div>
+        <div class="field"><label>Status</label>
+          <select name="status"><option>Open</option><option>Mitigated</option><option>Closed</option></select>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-risk','dw-risk')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-risk')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-pdpc" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">Add PDPC entry</span><button class="drawer-close" onclick="closeDrawer('dw-pdpc')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-pdpc" action="{{ url_for('save_pdpc') }}" method="POST">
+        <div class="field"><label>Risk *</label>
+          <select name="risk_id" required><option value="">Select…</option>
+          {% for r in risks %}<option value="{{ r.id }}">{{ r.title }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label>Potential problem *</label><textarea name="potential_problem" rows="2" required></textarea></div>
+        <div class="field"><label>Preventive action *</label><textarea name="preventive_action" rows="2" required></textarea></div>
+        <div class="field"><label>Corrective action *</label><textarea name="corrective_action" rows="2" required></textarea></div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-pdpc','dw-pdpc')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-pdpc')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function showQSec(s){
+  document.querySelectorAll('.qsec').forEach(el=>el.style.display='none');
+  document.getElementById('qs-'+s).style.display='';
+  document.querySelectorAll('.pane-list .list-item').forEach(el=>el.classList.remove('active'));
+}
+showQSec('kanban');
+
+function applyFilter(){
+  const sev=document.getElementById('sev-filter').value;
+  const url=new URL(window.location);
+  url.searchParams.set('sev',sev);
+  window.location=url.toString();
+}
+
+// Drag and drop kanban
+let draggedId=null;
+function dragCard(e,id){ draggedId=id; e.dataTransfer.effectAllowed='move'; }
+function dropCard(e,newStatus){
+  if(!draggedId) return;
+  moveDefect(draggedId,newStatus);
+}
+function moveDefect(id,status){
+  const fd=new FormData(); fd.append('id',id); fd.append('status',status); fd.append('_action','status');
+  fetch('{{ url_for("save_defect") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast('Status updated','ok');setTimeout(()=>location.reload(),500);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function editDefect(id,title,desc,sev,status,asgn,deliv,req){
+  document.getElementById('defect-id').value=id;
+  document.getElementById('defect-dw-title').textContent='Edit defect';
+  document.querySelector('#form-defect [name=title]').value=title;
+  document.querySelector('#form-defect [name=description]').value=desc;
+  document.querySelector('#form-defect [name=severity]').value=sev;
+  document.querySelector('#form-defect [name=status]').value=status;
+  if(asgn) document.querySelector('#form-defect [name=assigned_to]').value=asgn;
+  if(deliv) document.querySelector('#form-defect [name=deliverable_id]').value=deliv;
+  if(req) document.querySelector('#form-defect [name=requirement_id]').value=req;
+  openDrawer('dw-defect');
+}
+function delDefect(id){
+  if(!confirm('Delete defect?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_defect") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function delChecklist(id){
+  if(!confirm('Delete checklist item?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_checklist") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function editRisk(id,title,desc,l,i,cat,status){
+  document.getElementById('risk-id').value=id;
+  document.getElementById('risk-dw-title').textContent='Edit risk';
+  document.querySelector('#form-risk [name=title]').value=title;
+  document.querySelector('#form-risk [name=description]').value=desc;
+  document.querySelector('#form-risk [name=likelihood]').value=l;
+  document.querySelector('#form-risk [name=impact]').value=i;
+  document.querySelector('#form-risk [name=category]').value=cat;
+  document.querySelector('#form-risk [name=status]').value=status;
+  openDrawer('dw-risk');
+}
+function delRisk(id){
+  if(!confirm('Delete risk?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_risk") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function delPDPC(id){
+  if(!confirm('Delete PDPC entry?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_pdpc") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+// init accordion open
+document.querySelectorAll('.accordion-body').forEach(el=>el.style.display='block');
+</script>
+{% endblock %}

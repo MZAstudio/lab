@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}Schedule — Healthcare PM{% endblock %}
+{% block content %}
+<div class="workspace">
+  <!-- LEFT: activity list -->
+  <div class="pane-list" style="width:340px">
+    <div class="pane-header">
+      <span class="pane-title">Activities ({{ acts|length }})</span>
+      <button class="btn btn-primary btn-sm" onclick="openDrawer('dw-act')">+ New</button>
+    </div>
+    <div class="pane-body">
+      {% for a in acts %}
+      {% set is_delayed = a.id in delayed_ids %}
+      <div class="list-item" style="{{ 'border-left:3px solid var(--danger)' if is_delayed else '' }}">
+        <div style="flex:1;min-width:0">
+          <div class="list-item-title" style="{{ 'color:var(--danger)' if is_delayed else '' }}">
+            {{ a.name }}{% if is_delayed %} ⚠{% endif %}
+          </div>
+          <div class="list-item-sub">{{ a.planned_start }} → {{ a.planned_end }} | {{ a.percent_complete|int }}% | {% if a.member_name %}{{ a.member_name }}{% else %}Unassigned{% endif %}</div>
+        </div>
+        <div class="list-item-actions">
+          <button class="btn btn-xs btn-ghost" onclick="editAct({{ a.id }},{{ a.percent_complete }}, '{{ a.actual_start or '' }}','{{ a.actual_end or '' }}',{{ a.planned_cost }})">✏</button>
+          <button class="btn btn-xs btn-danger" onclick="delAct({{ a.id }})">✕</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- RIGHT: Gantt -->
+  <div class="pane-main" style="min-width:0">
+    <!-- deadline status bar -->
+    {% if charter %}
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);flex-wrap:wrap">
+      <span style="font-size:13px">Original deadline: <strong>{{ charter.deadline }}</strong></span>
+      {% if projected_deadline %}
+      {% set pd_str = projected_deadline.strftime('%Y-%m-%d') %}
+      <span style="font-size:13px">Projected finish: <strong style="{{ 'color:var(--danger)' if pd_str > charter.deadline else 'color:var(--success)' }}">{{ pd_str }}</strong></span>
+      {% if pd_str > charter.deadline %}
+      {% set slip = (projected_deadline - projected_deadline.__class__.fromisoformat(charter.deadline)).days %}
+      <span class="chip chip-open">⚠ Deadline missed — {{ slip }} days slip</span>
+      {% else %}
+      <span class="chip chip-approved">✓ On track</span>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Delayed activity impact -->
+    {% if delayed %}
+    <div style="margin-bottom:14px">
+      {% for d in delayed %}
+      <div class="warn-banner warn-critical">
+        <span>🔴</span>
+        <span><strong>{{ d.name }}</strong>: {{ d.reason }}
+          {% if d.affected_names %} → Impacts: {{ d.affected_names[:3]|join(', ') }}{% if d.affected_names|length > 3 %} +{{ d.affected_names|length-3 }} more{% endif %}{% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Gantt chart -->
+    <div class="gantt-wrap">
+      <div id="gantt-container"></div>
+    </div>
+
+    <!-- Dependencies -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+        Dependencies
+        <button class="btn btn-outline btn-sm" onclick="openDrawer('dw-dep')">+ Add dependency</button>
+      </div>
+      <table class="tbl" style="font-size:12px">
+        <thead><tr><th>Activity</th><th>Depends on (predecessors)</th><th></th></tr></thead>
+        <tbody>
+        {% for a in acts %}
+        {% set preds = deps.get(a.id, []) %}
+        {% if preds %}
+        <tr>
+          <td><strong>{{ a.name }}</strong></td>
+          <td>
+            {% for pid in preds %}
+            {% for aa in acts %}{% if aa.id == pid %}<span class="tag">{{ aa.name }}</span> {% endif %}{% endfor %}
+            {% endfor %}
+          </td>
+          <td>
+            {% for pid in preds %}
+            <button class="btn btn-xs btn-danger" onclick="delDep({{ a.id }},{{ pid }})">✕ {{ pid }}</button>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- DRAWERS -->
+<div id="dw-act" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title" id="act-dw-title">New activity</span><button class="drawer-close" onclick="closeDrawer('dw-act')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-act" action="{{ url_for('save_activity') }}" method="POST">
+        <input type="hidden" name="id" id="act-id">
+        <div class="field"><label>Name *</label><input type="text" name="name" id="act-name-f" required></div>
+        <div class="field-row">
+          <div class="field"><label>Work package</label>
+            <select name="work_package_id">
+              <option value="">— None —</option>
+              {% for wp in wps %}<option value="{{ wp.id }}">{{ wp.dname }} / {{ wp.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field"><label>Assigned to</label>
+            <select name="assigned_member_id">
+              <option value="">— None —</option>
+              {% for tm in team %}<option value="{{ tm.id }}">{{ tm.name }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Duration (days) *</label><input type="number" name="estimated_duration" min="1" max="999" value="5" required></div>
+          <div class="field"><label>Planned start *</label><input type="date" name="planned_start" required></div>
+          <div class="field"><label>Planned end *</label><input type="date" name="planned_end" required></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Actual start</label><input type="date" name="actual_start"></div>
+          <div class="field"><label>% Complete</label><input type="number" name="percent_complete" min="0" max="100" value="0"></div>
+          <div class="field"><label>Planned cost (PKR) *</label><input type="number" name="planned_cost" min="0" step="1000" value="0" required></div>
+        </div>
+        <div class="field" id="pred-field">
+          <label>Predecessors (hold Ctrl to select multiple)</label>
+          <select name="predecessors" multiple style="height:80px">
+            {% for a in acts %}<option value="{{ a.id }}">{{ a.id }}: {{ a.name }}</option>{% endfor %}
+          </select>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-act','dw-act')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-act')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-dep" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">Add dependency</span><button class="drawer-close" onclick="closeDrawer('dw-dep')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-dep" action="{{ url_for('save_dep') }}" method="POST">
+        <div class="field"><label>Activity (successor) *</label>
+          <select name="act_id" required>
+            <option value="">Select…</option>
+            {% for a in acts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label>Depends on (predecessor) *</label>
+          <select name="pred_id" required>
+            <option value="">Select…</option>
+            {% for a in acts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+          </select>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-dep','dw-dep')">Add</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-dep')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const ganttData = {{ gantt|tojson }};
+const milestones = {{ milestones|tojson }};
+const statusDate = '{{ sd }}';
+const deadline = '{{ charter.deadline if charter else "" }}';
+const delayedAffectedMap = {};
+{% for d in delayed %}
+delayedAffectedMap[{{ d.id }}] = {{ d.affected_ids|tojson }};
+{% endfor %}
+window._delayedAffected = delayedAffectedMap;
+renderGantt(ganttData, milestones, statusDate, deadline, 'gantt-container');
+
+function editAct(id,pct,astart,aend,cost){
+  document.getElementById('act-id').value=id;
+  document.getElementById('act-dw-title').textContent='Update activity progress';
+  document.getElementById('act-name-f').disabled=true;
+  document.getElementById('pred-field').style.display='none';
+  const f=document.getElementById('form-act');
+  f.querySelector('[name=percent_complete]').value=pct;
+  f.querySelector('[name=actual_start]').value=astart;
+  f.querySelector('[name=actual_end]').value=aend;
+  f.querySelector('[name=planned_cost]').value=cost;
+  openDrawer('dw-act');
+}
+function delAct(id){
+  if(!confirm('Delete activity?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_activity") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function delDep(aid,pid){
+  if(!confirm('Remove dependency?')) return;
+  const fd=new FormData(); fd.append('act_id',aid); fd.append('pred_id',pid); fd.append('_action','delete');
+  fetch('{{ url_for("save_dep") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+document.getElementById('dw-act').addEventListener('click',function(e){
+  if(e.target===this){closeDrawer('dw-act');}
+});
+</script>
+{% endblock %}

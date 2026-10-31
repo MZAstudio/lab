@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+{% block title %}Initiation — Healthcare PM{% endblock %}
+{% block content %}
+<div class="workspace">
+  <!-- LEFT PANE -->
+  <div class="pane-list">
+    <div class="pane-header">
+      <span class="pane-title">Initiation</span>
+    </div>
+    <div class="pane-body">
+      <div class="list-item" onclick="showSection('charter')"><div><div class="list-item-title">📋 Project Charter</div><div class="list-item-sub">Objectives, scope, budget</div></div></div>
+      <div class="list-item" onclick="showSection('plan')"><div><div class="list-item-title">📑 Management Plan</div><div class="list-item-sub">Scope, schedule, quality</div></div></div>
+      <div class="list-item" onclick="showSection('status')"><div><div class="list-item-title">🔖 Project Status</div><div class="list-item-sub">Current status & notes</div></div></div>
+      <div class="list-item" onclick="showSection('milestones')"><div><div class="list-item-title">🏁 Milestones</div><div class="list-item-sub">{{ milestones|length }} milestones</div></div></div>
+      <div class="list-item" onclick="showSection('responsibilities')"><div><div class="list-item-title">👥 Responsibilities</div><div class="list-item-sub">{{ responsibilities|length }} assignments</div></div></div>
+      <div class="list-item" onclick="showSection('closure')"><div><div class="list-item-title">🔒 Closure Records</div><div class="list-item-sub">{{ closures|length }} records</div></div></div>
+    </div>
+  </div>
+
+  <!-- MAIN PANE -->
+  <div class="pane-main">
+
+    <!-- CHARTER -->
+    <div id="sec-charter" class="init-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <span class="section-title">📋 Project Charter</span>
+        <button class="btn btn-outline btn-sm" onclick="openDrawer('dw-charter')">✏ Edit Charter</button>
+      </div>
+      {% if charter %}
+      <div class="charter-doc">
+        <h2>{{ charter.project_name }}</h2>
+        <div style="display:flex;gap:20px;margin-top:8px;flex-wrap:wrap;font-size:13px;color:var(--ink3)">
+          <span>Start: <strong>{{ charter.start_date }}</strong></span>
+          <span>Deadline: <strong>{{ charter.deadline }}</strong></span>
+          <span>Budget: <strong style="color:var(--success)">PKR {{ "{:,.0f}".format(charter.approved_budget) }}</strong></span>
+        </div>
+        <div class="charter-section">
+          <h4>Objectives</h4><p>{{ charter.objectives }}</p>
+        </div>
+        <div class="charter-section">
+          <h4>Stakeholders</h4><p>{{ charter.stakeholders }}</p>
+        </div>
+        <div class="charter-section">
+          <h4>In-scope</h4><p>{{ charter.in_scope }}</p>
+        </div>
+        <div class="charter-section">
+          <h4>Out-of-scope</h4><p>{{ charter.out_scope }}</p>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty-state"><div class="es-icon">📋</div><p>No charter yet.</p><button class="btn btn-primary mt-8" onclick="openDrawer('dw-charter')">Create Charter</button></div>
+      {% endif %}
+    </div>
+
+    <!-- PLAN -->
+    <div id="sec-plan" class="init-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <span class="section-title">📑 Project Management Plan</span>
+        <button class="btn btn-outline btn-sm" onclick="openDrawer('dw-plan')">✏ Edit Plan</button>
+      </div>
+      {% if plan %}
+      <div class="charter-doc">
+        <div class="charter-section" style="border-top:none;padding-top:0">
+          <h4>Scope description</h4><p>{{ plan.scope_description }}</p>
+        </div>
+        <div class="charter-section">
+          <h4>Quality standards</h4><p>{{ plan.quality_standards }}</p>
+        </div>
+        {% if plan.notes %}
+        <div class="charter-section"><h4>Notes</h4><p>{{ plan.notes }}</p></div>
+        {% endif %}
+        <div class="charter-section">
+          <h4>Live schedule &amp; cost data</h4>
+          <table class="tbl" style="margin-top:8px">
+            <tr><td style="color:var(--ink3)">Total activities</td><td><strong>{{ acts_count }}</strong></td></tr>
+            <tr><td style="color:var(--ink3)">Total planned cost (BAC)</td><td class="num"><strong>PKR {{ "{:,.0f}".format(planned_total) }}</strong></td></tr>
+            <tr><td style="color:var(--ink3)">Approved budget</td><td class="num"><strong>PKR {{ "{:,.0f}".format(charter.approved_budget if charter else 0) }}</strong></td></tr>
+            <tr><td style="color:var(--ink3)">Approved requirements in scope</td><td><strong>{{ approved_reqs|length }}</strong></td></tr>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty-state"><div class="es-icon">📑</div><p>No plan yet.</p><button class="btn btn-primary mt-8" onclick="openDrawer('dw-plan')">Create Plan</button></div>
+      {% endif %}
+    </div>
+
+    <!-- STATUS -->
+    <div id="sec-status" class="init-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <span class="section-title">🔖 Project Status</span>
+        <button class="btn btn-outline btn-sm" onclick="openDrawer('dw-status')">✏ Update</button>
+      </div>
+      {% if status %}
+      <div class="card" style="max-width:500px">
+        <table class="tbl">
+          <tr><td class="text-muted">Status</td><td><span class="chip chip-{{ 'resolved' if status.status=='Completed' else ('inprog' if status.status=='Active' else 'proposed') }}">{{ status.status }}</span></td></tr>
+          <tr><td class="text-muted">Status date</td><td>{{ status.status_date }}</td></tr>
+          <tr><td class="text-muted">Notes</td><td>{{ status.notes or '—' }}</td></tr>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><div class="es-icon">🔖</div><p>No status set.</p></div>
+      {% endif %}
+    </div>
+
+    <!-- MILESTONES -->
+    <div id="sec-milestones" class="init-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <span class="section-title">🏁 Milestones</span>
+        <button class="btn btn-primary btn-sm" onclick="openDrawer('dw-milestone')">+ New milestone</button>
+      </div>
+      <div class="timeline" style="margin-bottom:20px">
+        <div class="tl-line"></div>
+        <div class="tl-items">
+          {% for m in milestones %}
+          <div class="tl-item">
+            <div class="tl-dot {{ 'completed' if m.status=='Completed' else ('inprog' if m.status=='In Progress' else ('delayed' if m.status=='Delayed' else 'pending')) }}"></div>
+            <div class="tl-name">{{ m.name }}</div>
+            <div class="tl-date">{{ m.due_date }}</div>
+            <span class="chip chip-{{ 'resolved' if m.status=='Completed' else ('inprog' if m.status=='In Progress' else ('open' if m.status=='Delayed' else 'closed')) }}">{{ m.status }}</span>
+            <div style="display:flex;gap:4px;margin-top:2px">
+              <button class="btn btn-xs btn-ghost" onclick="editMilestone({{ m.id }},'{{ m.name|e }}','{{ m.due_date }}','{{ m.status }}')">Edit</button>
+              <button class="btn btn-xs btn-danger" onclick="deleteMilestone({{ m.id }})">Del</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- RESPONSIBILITIES -->
+    <div id="sec-responsibilities" class="init-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <span class="section-title">👥 Team Responsibilities</span>
+        <button class="btn btn-primary btn-sm" onclick="openDrawer('dw-resp')">+ Add responsibility</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Person</th><th>Role</th><th>Responsibility</th><th></th></tr></thead>
+          <tbody>
+          {% for r in responsibilities %}
+          <tr>
+            <td><strong>{{ r.person_name }}</strong></td>
+            <td>{{ r.role }}</td>
+            <td>{{ r.responsibility }}</td>
+            <td style="white-space:nowrap">
+              <button class="btn btn-xs btn-ghost" onclick="editResp({{ r.id }},'{{ r.person_name|e }}','{{ r.role|e }}','{{ r.responsibility|e }}')">Edit</button>
+              <button class="btn btn-xs btn-danger" onclick="deleteResp({{ r.id }})">Del</button>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CLOSURE -->
+    <div id="sec-closure" class="init-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <span class="section-title">🔒 Closure Records</span>
+        <button class="btn btn-primary btn-sm" onclick="openDrawer('dw-closure')">+ Add record</button>
+      </div>
+      {% if closures %}
+      {% for c in closures %}
+      <div class="card" style="max-width:680px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <strong>{{ c.closure_date }}</strong>
+          <span class="chip chip-{{ 'resolved' if c.closure_status=='Closed' else ('inprog' if c.closure_status=='Archived' else 'proposed') }}">{{ c.closure_status }}</span>
+        </div>
+        <div style="font-size:13px;color:var(--ink2);margin-bottom:6px"><strong>Final notes:</strong> {{ c.final_notes }}</div>
+        <div style="font-size:13px;color:var(--ink2)"><strong>Lessons learned:</strong> {{ c.lessons_learned }}</div>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn btn-xs btn-ghost" onclick="editClosure({{ c.id }},'{{ c.closure_date }}','{{ c.final_notes|e }}','{{ c.lessons_learned|e }}','{{ c.closure_status }}')">Edit</button>
+          <button class="btn btn-xs btn-danger" onclick="deleteClosure({{ c.id }})">Delete</button>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="empty-state"><div class="es-icon">🔒</div><p>No closure records yet.</p></div>
+      {% endif %}
+    </div>
+
+  </div><!-- /pane-main -->
+</div>
+
+<!-- DRAWERS -->
+{% macro field(name,label,type='text',val='',req=true,rows=3) %}
+<div class="field">
+  <label>{{ label }}{% if req %} *{% endif %}</label>
+  {% if type=='textarea' %}
+  <textarea name="{{ name }}" rows="{{ rows }}" {% if req %}required{% endif %}>{{ val }}</textarea>
+  {% elif type=='select_status' %}
+  <select name="{{ name }}"><option {% if val=='Active' %}selected{% endif %}>Active</option><option {% if val=='On Hold' %}selected{% endif %}>On Hold</option><option {% if val=='Completed' %}selected{% endif %}>Completed</option><option {% if val=='Cancelled' %}selected{% endif %}>Cancelled</option></select>
+  {% elif type=='select_msstatus' %}
+  <select name="{{ name }}"><option {% if val=='Pending' %}selected{% endif %}>Pending</option><option {% if val=='In Progress' %}selected{% endif %}>In Progress</option><option {% if val=='Completed' %}selected{% endif %}>Completed</option><option {% if val=='Delayed' %}selected{% endif %}>Delayed</option></select>
+  {% elif type=='select_cs' %}
+  <select name="{{ name }}"><option {% if val=='Open' %}selected{% endif %}>Open</option><option {% if val=='Closed' %}selected{% endif %}>Closed</option><option {% if val=='Archived' %}selected{% endif %}>Archived</option></select>
+  {% else %}
+  <input type="{{ type }}" name="{{ name }}" value="{{ val }}" {% if req %}required{% endif %}>
+  {% endif %}
+</div>
+{% endmacro %}
+
+<div id="dw-charter" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">Edit Project Charter</span><button class="drawer-close" onclick="closeDrawer('dw-charter')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-charter" action="{{ url_for('save_charter') }}" method="POST">
+        {{ field('project_name','Project name','text', charter.project_name if charter else '') }}
+        {{ field('objectives','Objectives','textarea', charter.objectives if charter else '') }}
+        {{ field('stakeholders','Stakeholders','textarea', charter.stakeholders if charter else '',rows=2) }}
+        {{ field('in_scope','In-scope','textarea', charter.in_scope if charter else '',rows=2) }}
+        {{ field('out_scope','Out-of-scope','textarea', charter.out_scope if charter else '',rows=2) }}
+        <div class="field-row">
+          <div class="field"><label>Approved budget (PKR) *</label><input type="number" name="approved_budget" min="1" step="1000" value="{{ charter.approved_budget|int if charter else 5000000 }}" required></div>
+          <div class="field"><label>Start date *</label><input type="date" name="start_date" value="{{ charter.start_date if charter else '2024-01-08' }}" required></div>
+          <div class="field"><label>Deadline *</label><input type="date" name="deadline" value="{{ charter.deadline if charter else '2024-04-26' }}" required></div>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-charter','dw-charter')">Save charter</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-charter')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-plan" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">Edit Management Plan</span><button class="drawer-close" onclick="closeDrawer('dw-plan')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-plan" action="{{ url_for('save_plan') }}" method="POST">
+        {{ field('scope_description','Scope description','textarea', plan.scope_description if plan else '') }}
+        {{ field('quality_standards','Quality standards','textarea', plan.quality_standards if plan else '') }}
+        {{ field('notes','Notes (optional)','textarea', plan.notes if plan else '',req=false) }}
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-plan','dw-plan')">Save plan</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-plan')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-status" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">Update Project Status</span><button class="drawer-close" onclick="closeDrawer('dw-status')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-status" action="{{ url_for('save_status') }}" method="POST">
+        {{ field('status','Status','select_status', status.status if status else 'Active') }}
+        {{ field('status_date','Status date','date', status.status_date if status else '') }}
+        {{ field('notes','Notes','textarea', status.notes if status else '',req=false,rows=2) }}
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-status','dw-status')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-status')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-milestone" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title" id="ms-dw-title">New milestone</span><button class="drawer-close" onclick="closeDrawer('dw-milestone')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-milestone" action="{{ url_for('save_milestone') }}" method="POST">
+        <input type="hidden" name="id" id="ms-id">
+        {{ field('name','Name') }}
+        {{ field('due_date','Due date','date') }}
+        {{ field('status','Status','select_msstatus') }}
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-milestone','dw-milestone')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-milestone')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-resp" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title" id="resp-dw-title">Add responsibility</span><button class="drawer-close" onclick="closeDrawer('dw-resp')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-resp" action="{{ url_for('save_responsibility') }}" method="POST">
+        <input type="hidden" name="id" id="resp-id">
+        {{ field('person_name','Person name') }}
+        {{ field('role','Role') }}
+        {{ field('responsibility','Responsibility','textarea',rows=2) }}
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-resp','dw-resp')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-resp')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-closure" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title" id="cl-dw-title">Add closure record</span><button class="drawer-close" onclick="closeDrawer('dw-closure')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-closure" action="{{ url_for('save_closure') }}" method="POST">
+        <input type="hidden" name="id" id="cl-id">
+        {{ field('closure_date','Closure date','date') }}
+        {{ field('final_notes','Final notes','textarea',rows=2) }}
+        {{ field('lessons_learned','Lessons learned','textarea',rows=3) }}
+        {{ field('closure_status','Closure status','select_cs') }}
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-closure','dw-closure')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-closure')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+var _actsCount = {{ acts_count }};
+function showSection(s) {
+  document.querySelectorAll('.init-section').forEach(el=>el.style.display='none');
+  document.getElementById('sec-'+s).style.display='';
+  document.querySelectorAll('.pane-list .list-item').forEach(el=>el.classList.remove('active'));
+}
+showSection('charter');
+document.querySelectorAll('.pane-list .list-item').forEach((el,i)=>{
+  el.addEventListener('click',()=>{document.querySelectorAll('.pane-list .list-item').forEach(e=>e.classList.remove('active'));el.classList.add('active');});
+});
+
+function editMilestone(id,name,date,status){
+  document.getElementById('ms-id').value=id;
+  document.getElementById('ms-dw-title').textContent='Edit milestone';
+  document.querySelector('#form-milestone [name=name]').value=name;
+  document.querySelector('#form-milestone [name=due_date]').value=date;
+  document.querySelector('#form-milestone [name=status]').value=status;
+  openDrawer('dw-milestone');
+}
+function deleteMilestone(id){
+  if(!confirm('Delete milestone?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_milestone") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function editResp(id,pname,role,resp){
+  document.getElementById('resp-id').value=id;
+  document.getElementById('resp-dw-title').textContent='Edit responsibility';
+  document.querySelector('#form-resp [name=person_name]').value=pname;
+  document.querySelector('#form-resp [name=role]').value=role;
+  document.querySelector('#form-resp [name=responsibility]').value=resp;
+  openDrawer('dw-resp');
+}
+function deleteResp(id){
+  if(!confirm('Delete?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_responsibility") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function editClosure(id,date,notes,lessons,cstatus){
+  document.getElementById('cl-id').value=id;
+  document.getElementById('cl-dw-title').textContent='Edit closure record';
+  document.querySelector('#form-closure [name=closure_date]').value=date;
+  document.querySelector('#form-closure [name=final_notes]').value=notes;
+  document.querySelector('#form-closure [name=lessons_learned]').value=lessons;
+  document.querySelector('#form-closure [name=closure_status]').value=cstatus;
+  openDrawer('dw-closure');
+}
+function deleteClosure(id){
+  if(!confirm('Delete?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_closure") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+</script>
+{% endblock %}

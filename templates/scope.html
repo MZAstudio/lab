@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+{% block title %}Scope & WBS — Healthcare PM{% endblock %}
+{% block content %}
+<div class="workspace">
+  <div class="pane-list">
+    <div class="pane-header">
+      <span class="pane-title">Scope & WBS</span>
+    </div>
+    <div class="pane-body">
+      <div class="list-item" onclick="showScopeSection('requirements')"><div><div class="list-item-title">📝 Requirements</div><div class="list-item-sub">{{ reqs|length }} total</div></div></div>
+      <div class="list-item" onclick="showScopeSection('wbs')"><div><div class="list-item-title">🗂 WBS</div><div class="list-item-sub">Org-chart tree</div></div></div>
+      <div class="list-item" onclick="showScopeSection('changerequests')"><div><div class="list-item-title">🔄 Change Requests</div><div class="list-item-sub">{{ crs|length }} total</div></div></div>
+    </div>
+  </div>
+
+  <div class="pane-main">
+
+    <!-- REQUIREMENTS -->
+    <div id="sc-requirements" class="scope-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <span class="section-title">📝 Requirements</span>
+        <button class="btn btn-primary btn-sm" onclick="openReqDrawer()">+ New requirement</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>#</th><th>Title</th><th>Priority</th><th>Status</th><th>Source</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for r in reqs %}
+          <tr>
+            <td style="color:var(--ink3)">{{ loop.index }}</td>
+            <td>
+              <strong>{{ r.title }}</strong>
+              <div style="font-size:12px;color:var(--ink3);max-width:300px">{{ r.description[:80] }}{% if r.description|length>80 %}…{% endif %}</div>
+            </td>
+            <td><span class="chip chip-{{ r.priority|lower }}">{{ r.priority }}</span></td>
+            <td><span class="chip chip-{{ 'approved' if r.status=='Approved' else ('rejected' if r.status=='Rejected' else 'proposed') }}">{{ r.status }}</span></td>
+            <td style="font-size:12px;color:var(--ink3)">{{ r.source }}</td>
+            <td style="white-space:nowrap">
+              <button class="btn btn-xs btn-ghost" onclick="editReq({{ r.id }},'{{ r.title|e }}',`{{ r.description|e }}`,'{{ r.priority }}','{{ r.status }}')">Edit</button>
+              {% if r.status=='Proposed' %}
+              <button class="btn btn-xs btn-success" onclick="reqAction({{ r.id }},'approve')">Approve</button>
+              <button class="btn btn-xs btn-warn" onclick="reqAction({{ r.id }},'reject')">Reject</button>
+              {% endif %}
+              <button class="btn btn-xs btn-danger" onclick="reqAction({{ r.id }},'delete')">Del</button>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- WBS -->
+    <div id="sc-wbs" class="scope-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <span class="section-title">🗂 Work Breakdown Structure</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="openDrawer('dw-deliverable')">+ Deliverable</button>
+          <button class="btn btn-outline btn-sm" onclick="openDrawer('dw-wp')">+ Work Package</button>
+        </div>
+      </div>
+      <div class="wbs-tree">
+        <div class="wbs-project-node">📁 Smart Healthcare Project Management System</div>
+        {% for node in tree %}
+        <div class="wbs-level1">
+          <div class="wbs-del-node" title="Click to collapse">
+            <span>📦</span>
+            <strong>{{ node.d.name }}</strong>
+            {% if node.d.req_title %}
+            <span class="chip chip-{{ 'approved' if node.d.req_status=='Approved' else 'proposed' }}" style="font-size:10px">{{ node.d.req_title[:25] }}</span>
+            {% endif %}
+            <div style="margin-left:auto;display:flex;gap:4px">
+              <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();delDeliverable({{ node.d.id }})">✕</button>
+            </div>
+          </div>
+          <div class="wbs-level2-group">
+            {% for wp in node.wps %}
+            <div class="wbs-level2">
+              <div class="wbs-wp-node">
+                <span>📄</span> {{ wp.name }}
+                {% if wp.description %}<span style="color:var(--ink3);font-size:11px"> — {{ wp.description[:40] }}</span>{% endif %}
+                <button class="btn btn-xs btn-danger" style="margin-left:auto" onclick="delWP({{ wp.id }})">✕</button>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- CHANGE REQUESTS -->
+    <div id="sc-changerequests" class="scope-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <span class="section-title">🔄 Change Requests</span>
+        <button class="btn btn-primary btn-sm" onclick="openDrawer('dw-cr')">+ Submit CR</button>
+      </div>
+      <div class="cr-timeline">
+        {% for cr in crs %}
+        <div class="cr-item {{ cr.status|lower|replace(' ','-') }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div class="cr-title">{{ cr.title }}</div>
+            <span class="chip chip-{{ 'resolved' if cr.status=='Approved' else ('open' if cr.status=='Rejected' else 'pending') }}">{{ cr.status }}</span>
+          </div>
+          <div class="cr-meta">{{ cr.description[:120] }}{% if cr.description|length>120 %}…{% endif %}</div>
+          <div class="cr-meta" style="margin-top:4px">
+            <span>Cost impact: <strong>PKR {{ "{:,.0f}".format(cr.cost_impact) }}</strong></span> &nbsp;·&nbsp;
+            <span>Schedule: <strong>+{{ cr.schedule_impact_days }} days</strong></span>
+            {% if cr.req_title %} &nbsp;·&nbsp; <span>Req: <strong>{{ cr.req_title }}</strong></span>{% endif %}
+          </div>
+          <!-- Before → After preview for pending CRs -->
+          {% if cr.status=='Pending' %}
+          <div class="before-after" id="ba-{{ cr.id }}">
+            <div class="ba-col">
+              <div style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;margin-bottom:4px">Before</div>
+              <div class="ba-row"><span class="ba-label">Budget</span><span class="ba-val">PKR {{ "{:,.0f}".format(charter.approved_budget if charter else 0) }}</span></div>
+              <div class="ba-row"><span class="ba-label">Deadline</span><span class="ba-val">{{ charter.deadline if charter else '—' }}</span></div>
+            </div>
+            <div class="ba-arrow">→</div>
+            <div class="ba-col">
+              <div style="font-size:10px;font-weight:700;color:var(--danger);text-transform:uppercase;margin-bottom:4px">After approval</div>
+              <div class="ba-row"><span class="ba-label">Budget</span><span class="ba-val changed">PKR {{ "{:,.0f}".format((charter.approved_budget if charter else 0) + cr.cost_impact) }}</span></div>
+              <div class="ba-row"><span class="ba-label">Deadline</span><span class="ba-val changed" id="ba-dl-{{ cr.id }}">+{{ cr.schedule_impact_days }} days</span></div>
+            </div>
+          </div>
+          <div class="cr-actions">
+            <button class="btn btn-success btn-sm" onclick="approveCR({{ cr.id }})">✓ Approve</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectCR({{ cr.id }})">✗ Reject</button>
+            <button class="btn btn-ghost btn-sm" onclick="deleteCR({{ cr.id }})">Delete</button>
+          </div>
+          {% endif %}
+          {% if cr.status=='Approved' %}
+          <div style="margin-top:8px;font-size:12px;color:var(--success)">✓ Approved on {{ cr.approved_at[:10] if cr.approved_at else '—' }}. Budget and deadline updated.</div>
+          {% endif %}
+          {% if cr.status=='Rejected' %}
+          <div style="margin-top:8px;font-size:12px;color:var(--danger)">✗ Rejected. No changes made to budget, deadline, or scope.</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- DRAWERS -->
+<div id="dw-req" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title" id="req-dw-title">New requirement</span><button class="drawer-close" onclick="closeDrawer('dw-req')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-req" action="{{ url_for('save_req') }}" method="POST">
+        <input type="hidden" name="id" id="req-id">
+        <div class="field"><label>Title *</label><input type="text" name="title" required maxlength="200"></div>
+        <div class="field"><label>Description *</label><textarea name="description" rows="3" required></textarea></div>
+        <div class="field-row">
+          <div class="field"><label>Priority</label>
+            <select name="priority"><option>High</option><option selected>Medium</option><option>Low</option></select>
+          </div>
+          <div class="field"><label>Status</label>
+            <select name="status" id="req-status-sel"><option>Proposed</option><option>Approved</option><option>Rejected</option></select>
+          </div>
+          <div class="field"><label>Source</label>
+            <select name="source"><option>Initial</option><option>Change Request</option><option>Stakeholder</option></select>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-req','dw-req')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-req')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-deliverable" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">New deliverable</span><button class="drawer-close" onclick="closeDrawer('dw-deliverable')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-deliverable" action="{{ url_for('save_deliverable') }}" method="POST">
+        <div class="field"><label>Name *</label><input type="text" name="name" required></div>
+        <div class="field"><label>Description</label><textarea name="description" rows="2"></textarea></div>
+        <div class="field"><label>Link to approved requirement</label>
+          <select name="requirement_id"><option value="">— None —</option>
+          {% for r in approved_reqs %}<option value="{{ r.id }}">{{ r.title }}</option>{% endfor %}
+          </select>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-deliverable','dw-deliverable')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-deliverable')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-wp" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">New work package</span><button class="drawer-close" onclick="closeDrawer('dw-wp')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-wp" action="{{ url_for('save_wp') }}" method="POST">
+        <div class="field"><label>Name *</label><input type="text" name="name" required></div>
+        <div class="field"><label>Description</label><textarea name="description" rows="2"></textarea></div>
+        <div class="field"><label>Deliverable *</label>
+          <select name="deliverable_id" required>
+            <option value="">Select…</option>
+            {% for node in tree %}<option value="{{ node.d.id }}">{{ node.d.name }}</option>{% endfor %}
+          </select>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-wp','dw-wp')">Save</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-wp')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="dw-cr" class="drawer-overlay">
+  <div class="drawer">
+    <div class="drawer-header"><span class="drawer-title">Submit change request</span><button class="drawer-close" onclick="closeDrawer('dw-cr')">✕</button></div>
+    <div class="drawer-body">
+      <form id="form-cr" action="{{ url_for('save_cr') }}" method="POST">
+        <div class="field"><label>Title *</label><input type="text" name="title" required></div>
+        <div class="field"><label>Description *</label><textarea name="description" rows="3" required></textarea></div>
+        <div class="field"><label>Justification *</label><textarea name="justification" rows="2" required></textarea></div>
+        <div class="field-row">
+          <div class="field"><label>Cost impact (PKR) *</label><input type="number" name="cost_impact" min="0" step="1000" value="0" required></div>
+          <div class="field"><label>Schedule impact (days) *</label><input type="number" name="schedule_impact_days" min="0" max="365" value="0" required></div>
+        </div>
+        <div class="field"><label>Linked requirement</label>
+          <select name="requirement_id"><option value="">— None —</option>
+          {% for r in reqs %}<option value="{{ r.id }}">[{{ r.status }}] {{ r.title }}</option>{% endfor %}
+          </select>
+        </div>
+      </form>
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" onclick="submitForm('form-cr','dw-cr')">Submit</button>
+      <button class="btn btn-ghost" onclick="closeDrawer('dw-cr')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function showScopeSection(s){
+  document.querySelectorAll('.scope-section').forEach(el=>el.style.display='none');
+  document.getElementById('sc-'+s).style.display='';
+  document.querySelectorAll('.pane-list .list-item').forEach(el=>el.classList.remove('active'));
+}
+showScopeSection('requirements');
+
+function openReqDrawer(){
+  document.getElementById('req-id').value='';
+  document.getElementById('req-dw-title').textContent='New requirement';
+  document.getElementById('form-req').reset();
+  openDrawer('dw-req');
+}
+function editReq(id,title,desc,priority,status){
+  document.getElementById('req-id').value=id;
+  document.getElementById('req-dw-title').textContent='Edit requirement';
+  document.querySelector('#form-req [name=title]').value=title;
+  document.querySelector('#form-req [name=description]').value=desc;
+  document.querySelector('#form-req [name=priority]').value=priority;
+  document.querySelector('#form-req [name=status]').value=status;
+  openDrawer('dw-req');
+}
+function reqAction(id,action){
+  if(action==='delete' && !confirm('Delete this requirement?')) return;
+  const fd=new FormData();
+  fd.append('id',id); fd.append('_action',action);
+  fetch('{{ url_for("save_req") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function delDeliverable(id){
+  if(!confirm('Delete deliverable?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_deliverable") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function delWP(id){
+  if(!confirm('Delete work package?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_wp") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function approveCR(id){
+  if(!confirm('Approve this change request? This will update budget, deadline, and scope.')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','approve');
+  fetch('{{ url_for("save_cr") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok){
+        const r=d.result;
+        toast(`Approved! Budget: PKR ${Number(r.after.budget).toLocaleString()} | Deadline: ${r.after.deadline}`,'ok');
+        setTimeout(()=>location.reload(),1200);
+      } else toast(d.errors?d.errors[0]:'Error','err');
+    });
+}
+function rejectCR(id){
+  if(!confirm('Reject this change request? No changes will be made.')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','reject');
+  fetch('{{ url_for("save_cr") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+function deleteCR(id){
+  if(!confirm('Delete?')) return;
+  const fd=new FormData(); fd.append('id',id); fd.append('_action','delete');
+  fetch('{{ url_for("save_cr") }}',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{ if(d.ok){toast(d.msg,'ok');setTimeout(()=>location.reload(),600);}else toast(d.errors?d.errors[0]:'Error','err'); });
+}
+</script>
+{% endblock %}
